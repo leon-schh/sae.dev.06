@@ -1,0 +1,54 @@
+---
+- name: Deploy AddressBook Service on Docker Swarm
+  hosts: master
+  vars:
+    docker_user: "{{ lookup('ansible.builtin.env', 'DOCKER_USER') }}"
+    ansible_user: "{{ lookup('ansible.builtin.env', 'ANSIBLE_USER') }}"
+    ansible_password: "{{ lookup('ansible.builtin.env', 'ANSIBLE_PASSWORD') }}"
+    ansible_become_password: "{{ lookup('ansible.builtin.env', 'ANSIBLE_BECOME_PASSWORD') }}"
+  tasks:
+    - name: Create a directory for the project
+      file:
+        path: /home/{{ ansible_user }}/docker-swarm
+        state: directory
+
+    - name: Clone the GitLab repository
+      git:
+        repo: 'git@gyatlab.local:root/docker-swarm.git'
+        dest: /home/{{ ansible_user }}/docker-swarm/
+
+- name: Deploy AddressBook Service on Docker Swarm
+  hosts: master
+  vars:
+    docker_user: "{{ lookup('ansible.builtin.env', 'DOCKER_USER') }}"
+    ansible_user: "{{ lookup('ansible.builtin.env', 'ANSIBLE_USER') }}"
+    ansible_password: "{{ lookup('ansible.builtin.env', 'ANSIBLE_PASSWORD') }}"
+    ansible_become_password: "{{ lookup('ansible.builtin.env', 'ANSIBLE_BECOME_PASSWORD') }}"
+    image_tag: "{{ lookup('ansible.builtin.env', 'IMAGE_TAG') }}"
+  become: true
+  tasks:
+    - name: Create directory for Docker certificates
+      file:
+        path: /etc/docker/certs.d/gyatlab.local:5050
+        state: directory
+        mode: '0777'
+
+    - name: Copy certificate to Docker certs directory
+      copy:
+        src: gyatlab.local.crt
+        dest: /etc/docker/certs.d/gyatlab.local:5050/ca.crt
+        mode: '0644'
+    
+    - name: Restart Docker service
+      service:
+        name: docker
+        state: restarted
+
+    - name: Login to Docker registry
+      command: docker login gyatlab.local:5050 -u "{{ lookup('ansible.builtin.env', 'CI_USER') }}" -p "{{ lookup('ansible.builtin.env', 'CI_PASSWORD') }}"  
+
+    - name: Download Docker image from registry
+      command: docker pull gyatlab.local:5050/root/docker-swarm:{{ image_tag }}
+
+    - name: Deploy the service to Docker Swarm
+      command: docker service create --name addressbook-service --replicas 2 --publish 8080:8080 gyatlab.local:5050/root/docker-swarm:{{ image_tag }}

@@ -1,0 +1,158 @@
+stages:
+  - test
+  - destroy
+  - build
+  - image-test
+  - deploy_swarm 
+  - deploy
+  - api_test
+
+typecheck:
+  stage: test
+  image: python:3.8
+  before_script:
+    - apt update && apt install -y tree
+    - tree
+    - pip install -r tutorial-python-microservice-tornado-master/requirements.txt
+    - pip install mypy
+  script:
+    - cd tutorial-python-microservice-tornado-master
+    - mypy ./addrservice ./tests
+
+linter:
+  stage: test
+  image: python:3.8
+  before_script:
+    - apt update && apt install -y tree
+    - tree
+    - pip install -r tutorial-python-microservice-tornado-master/requirements.txt
+  script:
+    - cd tutorial-python-microservice-tornado-master
+    - python3 -m flake8 ./addrservice ./tests
+    - python3 ./run.py lint
+
+unit_test: 
+  stage: test
+  image: python:3.8
+  before_script:
+    - apt update && apt install -y tree
+    - tree
+    - pip install -r tutorial-python-microservice-tornado-master/requirements.txt
+  script:
+    - cd tutorial-python-microservice-tornado-master
+    - python -m unittest discover -s tests
+
+coverage:
+  stage: test
+  image: python:3.8
+  before_script:
+    - apt update && apt install -y tree
+    - pip install -r tutorial-python-microservice-tornado-master/requirements.txt
+    - pip install coverage
+  script:
+    - cd tutorial-python-microservice-tornado-master
+    - coverage run -m unittest discover -s tests
+    - coverage report -m
+    - coverage html
+  artifacts:
+    paths:
+      - tutorial-python-microservice-tornado-master/htmlcov/
+
+destroy:
+  stage: destroy
+  image: alpine/ansible:2.18.1
+  variables:
+    ANSIBLE_HOST_KEY_CHECKING: FALSE
+  script:
+    - ansible-playbook destroy_swarm.yml -i inventory.ini
+
+build:
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
+  before_script:
+    - |
+      echo "-----BEGIN CERTIFICATE-----
+      MIIDeTCCAmGgAwIBAgIUQFZYPludoTN4G+B4wunOjfUh/DIwDQYJKoZIhvcNAQEL
+      BQAwWDELMAkGA1UEBhMCRlIxEjAQBgNVBAgMCUdSQU5EIEVTVDEPMA0GA1UEBwwG
+      Q09MTUFSMQwwCgYDVQQKDANJVVQxFjAUBgNVBAMMDWd5YXRsYWIubG9jYWwwHhcN
+      MjUwMjI0MDk0MDU4WhcNMjYwMjI0MDk0MDU4WjBYMQswCQYDVQQGEwJGUjESMBAG
+      A1UECAwJR1JBTkQgRVNUMQ8wDQYDVQQHDAZDT0xNQVIxDDAKBgNVBAoMA0lVVDEW
+      MBQGA1UEAwwNZ3lhdGxhYi5sb2NhbDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCC
+      AQoCggEBAMNtGTq+3dDyMR/9nHFU7A6TeNiG540qvT3jgc1FKsFSvJIFYev6w5tS
+      pkHGV67x4P0AVhU8ycdU4V5YmoWuSonq9PzmleX++sD9n3iZJZMurKuqc1xX9K2x
+      RG94AxMMcWZzN8fMfAyGRpE2jIkKMJMSZuf0wLBMKw/9wYjo9JiWTPBA5inTJs0Z
+      AA8v5tZYZvD4+395HEcRu/XHdLtlOyFZGYTCtgYt6lPRkd8A213VyDsxXv20aqR2
+      P0u1yHMgSI3IJ5QYQwZRAPKszGQSkz68MUy9x6m/yyd8gqg7+0Tvqqrh7BJ9mMSt
+      u6SQF9xdvoyDjspgqYFi1G6XvbWVzk0CAwEAAaM7MDkwGAYDVR0RBBEwD4INZ3lh
+      dGxhYi5sb2NhbDAdBgNVHQ4EFgQUXGU9V03UpaflNxzC9/jKLS1SOS0wDQYJKoZI
+      hvcNAQELBQADggEBADK58Y2W+1i3gsp5l29UKEFRgAdZ+Oq/+RnFV9TVoFmCtNhG
+      JCUz/uuEVGjMxYLbEiYUtLdYWGk8Suy1KXNVPcMBQV9tONr7VyEZZhnATwytLdv0
+      k0y29jD7TA4CElKGWgSeoP68MGEKK6AmgUDZo0+z8dyJUoq8pX9laNe1Ppct/Son
+      MLStZsAnr/369lX3T8DAqjcFR7gno9wZ+EZcC+fYy34P36MYEA/2bluM6ynbok60
+      jBpO18NA2Dzm86mtQAwI764WI8WM5R3AsD/N46jrKDrDso2mGGulWqMgpN1Aj6iM
+      wcq9qFRKYJNQ52Rx0fM7+bzQ/VVn324sVJjExDc=
+      -----END CERTIFICATE-----" >> /kaniko/ssl/certs/ca-certificates.crt
+    - echo "{\"auths\":{\"${CI_REGISTRY}\":{\"auth\":\"$(printf "%s:%s" "${CI_REGISTRY_USER}" "${CI_REGISTRY_PASSWORD}" | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
+  script:
+    - /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --dockerfile "${CI_PROJECT_DIR}/Dockerfile"
+      --destination "${CI_REGISTRY_IMAGE}:${CI_COMMIT_BRANCH}"
+
+compliance:
+  stage: image-test
+  image:
+    name: hadolint/hadolint:latest-alpine
+    entrypoint: [""]
+  script:
+    - /bin/hadolint Dockerfile
+
+security:
+  stage: image-test
+  image:
+    name: aquasec/trivy
+    entrypoint: [""]
+  before_script:
+    - >
+      echo "Registry: ${CI_REGISTRY}" && echo "Image: ${CI_REGISTRY_IMAGE}:${CI_COMMIT_BRANCH}" &&trivy registry login --insecure --username ${CI_REGISTRY_USER} --password ${CI_REGISTRY_PASSWORD} ${CI_REGISTRY}
+  script:
+    - trivy image --scanners misconfig --insecure ${CI_REGISTRY_IMAGE}:${CI_COMMIT_BRANCH}
+
+deploy_swarm:
+  stage: deploy_swarm
+  image: alpine/ansible:2.18.1
+  variables:
+    ANSIBLE_HOST_KEY_CHECKING: FALSE
+  script:
+    - ansible-playbook playbook.yml -i inventory.ini
+
+build_and_deploy:
+  stage: deploy
+  image: alpine/ansible:2.18.1
+  variables:
+    ANSIBLE_HOST_KEY_CHECKING: FALSE
+  before_script:
+    - export IMAGE_TAG=${CI_COMMIT_REF_NAME}
+  script:
+    - ansible-playbook build_playbook.yaml -i inventory.ini
+  
+api_post_test:
+  stage: api_test
+  image: alpine/ansible:2.18.1
+  variables:
+    ANSIBLE_HOST_KEY_CHECKING: FALSE
+  script:
+    - >
+      apk add curl && curl -i -X POST http://10.129.4.102:8080/addresses -d '{"full_name": "Bill Gates"}'
+
+api_get_test:
+  stage: api_test
+  image: alpine/ansible:2.18.1
+  variables:
+    ANSIBLE_HOST_KEY_CHECKING: FALSE
+  script:
+    - >
+      apk add curl && curl -i -X GET http://10.129.4.102:8080/addresses
+

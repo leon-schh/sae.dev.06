@@ -1,0 +1,86 @@
+---
+- name: Install Docker and setup Docker Swarm
+  hosts: all
+  vars:
+    docker_user: "{{ lookup('ansible.builtin.env', 'DOCKER_USER') }}"
+    ansible_user: "{{ lookup('ansible.builtin.env', 'ANSIBLE_USER') }}"
+    ansible_password: "{{ lookup('ansible.builtin.env', 'ANSIBLE_PASSWORD') }}"
+    ansible_become_password: "{{ lookup('ansible.builtin.env', 'ANSIBLE_BECOME_PASSWORD') }}"
+  become: yes
+  tasks:
+    - name: Install required packages
+      apt:
+        name: 
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        state: present
+        update_cache: yes
+
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+        update_cache: yes
+
+    - name: Add user to docker group
+      user:
+        name: "{{ item }}"
+        groups: docker
+        append: yes
+      with_items: "{{ docker_user }}"
+
+    - name: Enable and start Docker service
+      systemd:
+        name: docker
+        enabled: yes
+        state: started
+
+- name: Initialize Docker Swarm
+  hosts: master
+  vars:
+    docker_user: "{{ lookup('ansible.builtin.env', 'DOCKER_USER') }}"
+    ansible_user: "{{ lookup('ansible.builtin.env', 'ANSIBLE_USER') }}"
+    ansible_password: "{{ lookup('ansible.builtin.env', 'ANSIBLE_PASSWORD') }}"
+    ansible_become_password: "{{ lookup('ansible.builtin.env', 'ANSIBLE_BECOME_PASSWORD') }}"
+  become: yes
+  tasks:
+    - name: Initialize Docker Swarm on master
+      shell: docker swarm init
+      register: swarm_init
+
+    - name: Get join token for worker nodes
+      shell: docker swarm join-token worker -q
+      register: worker_token
+      when: swarm_init.changed
+
+    - name: Debug worker token
+      debug:
+        msg: "Worker token is {{ worker_token.stdout }}"
+
+- name: Join Docker Swarm as worker
+  hosts: slaves
+  vars:
+    docker_user: "{{ lookup('ansible.builtin.env', 'DOCKER_USER') }}"
+    ansible_user: "{{ lookup('ansible.builtin.env', 'ANSIBLE_USER') }}"
+    ansible_password: "{{ lookup('ansible.builtin.env', 'ANSIBLE_PASSWORD') }}"
+    ansible_become_password: "{{ lookup('ansible.builtin.env', 'ANSIBLE_BECOME_PASSWORD') }}"
+  become: yes
+  tasks:
+    - name: Wait for master to be reachable
+      wait_for:
+        host: "{{ hostvars[groups['master'][0]]['ansible_default_ipv4']['address'] }}"
+        port: 22
+        delay: 10
+        timeout: 300
+
+    - name: Get join token from master
+      shell: docker swarm join-token worker -q
+      register: worker_token
+      delegate_to: "{{ groups['master'][0] }}"
+
+    - name: Join Docker Swarm as worker
+      shell: docker swarm join --token {{ worker_token.stdout }} {{ hostvars[groups['master'][0]]['ansible_default_ipv4']['address'] }}:2377
+      when: worker_token.stdout | length > 0

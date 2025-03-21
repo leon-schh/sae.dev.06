@@ -1,0 +1,48 @@
+---
+- name: Leave Docker Swarm on worker nodes
+  hosts: slaves
+  vars:
+    ansible_user: "{{ lookup('ansible.builtin.env', 'ANSIBLE_USER') }}"
+    ansible_password: "{{ lookup('ansible.builtin.env', 'ANSIBLE_PASSWORD') }}"
+    ansible_become_password: "{{ lookup('ansible.builtin.env', 'ANSIBLE_BECOME_PASSWORD') }}"
+  become: yes
+  tasks:
+    - name: Leave Docker Swarm
+      shell: docker swarm leave
+      ignore_errors: yes
+
+- name: Leave Docker Swarm on master node
+  hosts: master
+  vars:
+    ansible_user: "{{ lookup('ansible.builtin.env', 'ANSIBLE_USER') }}"
+    ansible_password: "{{ lookup('ansible.builtin.env', 'ANSIBLE_PASSWORD') }}"
+    ansible_become_password: "{{ lookup('ansible.builtin.env', 'ANSIBLE_BECOME_PASSWORD') }}"
+  become: yes
+  tasks:
+    - name: Leave Docker Swarm
+      shell: docker swarm leave --force
+      ignore_errors: yes
+
+- name: Clean up Docker on all nodes
+  hosts: all
+  vars:
+    ansible_user: "{{ lookup('ansible.builtin.env', 'ANSIBLE_USER') }}"
+    ansible_password: "{{ lookup('ansible.builtin.env', 'ANSIBLE_PASSWORD') }}"
+    ansible_become_password: "{{ lookup('ansible.builtin.env', 'ANSIBLE_BECOME_PASSWORD') }}"
+  become: yes
+  tasks:
+    - name: Remove all Docker containers
+      shell: docker rm -f $(docker ps -aq)
+      ignore_errors: yes
+
+    - name: Remove all Docker images
+      shell: docker rmi -f $(docker images -q)
+      ignore_errors: yes
+
+    - name: Remove all Docker volumes
+      shell: docker volume rm $(docker volume ls -q)
+      ignore_errors: yes
+
+    - name: Remove all Docker networks
+      shell: docker network rm $(docker network ls -q)
+      ignore_errors: yes
