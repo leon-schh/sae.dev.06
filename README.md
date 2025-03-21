@@ -4,43 +4,12 @@ This project demonstrates the deployment and testing of a microservice using Doc
 
 ## Table of Contents
 
-- [Project Setup](#project-setup)
-- [Provisioning VMs](#provisioning-vms)
 - [Deploying the Microservice](#deploying-the-microservice)
 - [Running Tests](#running-tests)
 - [Destroying VMs](#destroying-vms)
 - [CI/CD Pipeline](#cicd-pipeline)
 - [License](#license)
 
-## Project Setup
-
-1. Clone the repository:
-
-    ```bash
-    $ git clone https://github.com/your-repo/docker-swarm.git
-    $ cd docker-swarm
-    ```
-
-2. Set up the virtual environment:
-
-    ```bash
-    $ python3 -m venv .venv
-    $ source ./.venv/bin/activate
-    $ pip install --upgrade pip
-    $ pip install -r tutorial-python-microservice-tornado-master/requirements.txt
-    ```
-
-## Provisioning VMs
-
-The `provisioning.sh` script provisions three VMs on a Proxmox VE server: one master and two slaves.
-
-1. Ensure the Proxmox VE CLI tools are installed on your Proxmox VE server.
-2. Run the provisioning script:
-
-    ```bash
-    $ chmod +x provisioning/docker-swarm/provisioning.sh
-    $ provisioning/docker-swarm/provisioning.sh
-    ```
 
 ## Deploying the Microservice
 
